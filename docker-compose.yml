@@ -1,0 +1,101 @@
+version: '3.9'
+
+services:
+# redis DB
+  redis:
+    image: redis  
+    # container_name: 8a580f0ce7e3988b9dcb1a144049f63f06ccce5e1008d97043abceb4cf5eea2a
+    container_name: redis_R
+    ports:
+      - 6379:6379
+    volumes:
+    # เก็บ  data : map กับที่เก็บ data เดิม
+    # ส่วนแรกจะเป็น folder ที่เราสร้างขึ้นใน project : ส่วนนี้เอามาจาก docker
+      - ./data/redis:/data
+      - ./config/redis.conf:/redis.conf
+    command: redis-server /redis.conf
+    
+# # ********* ยิง Api เทส *******
+  k6:
+    image: loadimpact/k6
+    # container_name: 44b04594dcfd179d11767f642dd49dfeecab153446e87b6610ce3d50275888e9
+    container_name: k6_R
+      # ยิง ข้อมูลเทสไปที่ influxdb: port / db มี่สร้างขึ้นมา
+    environment:
+      - K6_OUT=influxdb=http://influxdb:8086/k6
+    volumes:
+      # ที่อยู่ scripts ที่จะ run
+      # ส่วนแรกจะเป็น folder ที่เราสร้างขึ้นใน project : ส่วนนี้เอามาจาก docker
+        - ./scripts:/scripts
+
+# # *******  เอาไว้รับข้อมูล เทสจาก k6 ******
+  influxdb:
+    image: influxdb:1.8.10
+    container_name: influxdb_DB_R
+    environment:
+    # สร้าง DB ขึ้นมา ชื่อ k6
+      - INFLUXDB_DB=k6
+    # ปรับขนาด Body Size
+      - INFLUXDB_HTTP_MAX_BODY_SIZE=0
+    ports:
+      - 8086:8086
+    volumes:
+    # ผลการเทสจะอยู่ที่นี้ / mapไปที่ containner /var/lib/influxdb
+    # ส่วนแรกจะเป็น folder ที่เราสร้างขึ้นใน project : ส่วนนี้เอามาจาก docker
+      - ./data/influxdb:/var/lib/influxdb  # ที่เก็บข้อมูล
+
+# #  ******** เอไว้แสดงผลเทสจาก k6 ใน influxdb  *******
+  grafana:
+    image: grafana/grafana
+    container_name: grafana_R
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      # เข้ามาแล้วเป็น admin เลย  จริงๆไม่ควรทำ
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    ports:
+      - 3000:3000
+    volumes:
+      # ที่เก็บข้อมูล
+      # ส่วนแรกจะเป็น folder ที่เราสร้างขึ้นใน project : ส่วนนี้เอามาจาก docker
+      - ./data/grafana:/var/lib/grafana
+    # /var/lib/grafana ที่เก็บข้อมูล
+
+  mariadb:
+    image: mariadb
+    container_name: mariadb_R
+    environment:
+      - MARIADB_ROOT_PASSWORD=P@ssw0rd
+      - MARIADB_DATABASE=redis
+    ports:
+      - 3366:3366
+      # - 3306:3306
+    volumes:
+      # ที่เก็บข้อมูล
+      # ส่วนแรกจะเป็น folder ที่เราสร้างขึ้นใน project : ส่วนนี้เอามาจาก docker
+      - ./data/mariadb:/var/lib/mysql  # ที่เก็บข้อมูล
+
+
+# docker run --name pg4 -p 8888:8888 -e 'PGADMIN_DEFAULT_EMAIL=user@gmail.com' -e 'PGADMIN_DEFAULT_PASSWORD=password' -d dpage/pgadmin4
+
+  pgadmin4:
+    depends_on:
+      - postgres_db
+    image: dpage/pgadmin4
+    container_name: pgadmin4
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=user@gmail.com
+      - PGADMIN_DEFAULT_PASSWORD=password
+    ports:
+      - 8080:80
+
+  # postgres_db:
+  #   image: postgres
+  #   container_name: postgresDB
+  #   restart: always
+  #   environment:
+  #     # - POSTGRES_USER=postgres
+  #     - POSTGRES_PASSWORD=password
+      # volumes:
+      #   -
+  #   ports: 
+  #     - 9090:9090
